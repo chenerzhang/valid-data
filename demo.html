@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>propTypes</title>
+</head>
+<body>
+    <script type="text/javascript" src="./src/index.js"></script>
+    <script>
+        var s = Symbol();
+        var obj = {
+                a: [1, 2, 3],
+                b: {
+                    ba: 3
+                },
+                c: [{
+                    ca: 1
+                }, {
+
+                }],
+                d: [
+                    [1, undefined, 3],
+                    undefined
+                ]
+            },
+            objType = {
+                a: {
+                    type: 'Array',
+                    isRequired: true,
+                    children: {
+                        type: 'Number',
+                        // default: 4,
+                        isRequired: true
+                    }
+                },
+                b: {
+                    type: 'Object',
+                    children: {
+                        ba: {
+                            type: 'Number'
+                        }
+                    }
+                },
+                c: {
+                    type: 'Array',
+                    isRequired: true,
+                    default: [],
+                    children: {
+                        ca: {
+                            isRequired: true,
+                            type: 'Number',
+                            default: 3
+                        }
+                    }
+                },
+                d: {
+                    type: 'Array',
+                    isRequired: true,
+                    children: {
+                        type: 'Array',
+                        children: {
+                            type: 'Number',
+                            default: 222,
+                            isRequired: true
+                        }
+                    }
+                }
+            }
+
+        checkType(obj, objType)
+        console.log(obj);
+    </script>
+</body>
+</html>
