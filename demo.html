@@ -26,11 +26,11 @@
             objType = {
                 a: {
                     type: 'Array',
-                    isRequired: true,
+                    required: true,
                     children: {
                         type: 'Number',
                         // default: 4,
-                        isRequired: true
+                        required: true
                     }
                 },
                 b: {
@@ -43,11 +43,11 @@
                 },
                 c: {
                     type: 'Array',
-                    isRequired: true,
+                    required: true,
                     default: [],
                     children: {
                         ca: {
-                            isRequired: true,
+                            required: true,
                             type: 'Number',
                             default: 3
                         }
@@ -55,13 +55,13 @@
                 },
                 d: {
                     type: 'Array',
-                    isRequired: true,
+                    required: true,
                     children: {
                         type: 'Array',
                         children: {
                             type: 'Number',
                             default: 222,
-                            isRequired: true
+                            required: true
                         }
                     }
                 }

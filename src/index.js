@@ -55,8 +55,7 @@ let getType = (obj, match) => {
     return rs;
 };
 
-function propTypeError(errorFn = emptyFn, propCheck, tagName, propsFullName, message) {
-    errorFn(propCheck, tagName, propsFullName);
+function propTypeError(message) {
     console.error(message);
 }
 
@@ -72,6 +71,7 @@ function propTypeError(errorFn = emptyFn, propCheck, tagName, propsFullName, mes
  */
 function checkType(checkObj, checkTypeObj, tagName = '<<anonymous>>', propsFullName = '', errorFn = emptyFn) {
     if (!getType(checkObj, 'Object') || !getType(checkTypeObj, 'Object')) {
+        errorFn(tagName, propsFullName, checkObj);
         return propTypeError(`In ${tagName}'s porperty ${propsFullName}, checkTypeObj is not Object.`);
     }
 
@@ -97,7 +97,7 @@ function judge(prop, checkObj, checkTypeObj, tagName, propsFullName, errorFn) {
     // 搞 prop.toString 主要是Symbol无法在模板字符串里取值，要人为toString取值
     let checkTypeObjFlag = getType(checkTypeObj.type, 'String'),
         propToStr = checkTypeObjFlag ? 
-                    '' : getType(prop) === 'Symbol' ?
+                    '' : getType(prop, 'Symbol') ?
                     prop.toString() :
                     prop,
         localPropsFullName = [propsFullName, propsFullName && propToStr ? '.' : '', propToStr].join(''),
@@ -106,9 +106,10 @@ function judge(prop, checkObj, checkTypeObj, tagName, propsFullName, errorFn) {
         propValType,
         msg;
 
-    msg = validateCheckType(propCheck, tagName, propsFullName);
+    msg = validateCheckType(propCheck, tagName, localPropsFullName);
     if (msg) {
-        return propTypeError(errorFn, propCheck, tagName, propsFullName, msg);
+        errorFn(tagName, localPropsFullName, propCheck);
+        return propTypeError(msg);
     }
 
     // 不存在则赋默认值
@@ -118,18 +119,31 @@ function judge(prop, checkObj, checkTypeObj, tagName, propsFullName, errorFn) {
     propValType = getType(propVal);
 
     // 验证是否为必须
-    if (propCheck.isRequired) {
+    if (propCheck.required) {
         if (propVal == null) {
             if (propVal === null) {
-                return propTypeError(errorFn, propCheck, tagName, propsFullName, `In ${tagName}'s porperty ${localPropsFullName}, it is marked as required, but its value is 'null'.`);
+                msg = `In ${tagName}'s porperty ${localPropsFullName}, it is marked as required, but its value is 'null'.`;
+            } else {
+                msg = `In ${tagName}'s porperty ${localPropsFullName}, it is marked as required, but its value is 'undefined'.`;
             }
-            return propTypeError(errorFn, propCheck, tagName, propsFullName, `In ${tagName}'s porperty ${localPropsFullName}, it is marked as required, but its value is 'undefined'.`);
+
+            errorFn(tagName, localPropsFullName, propCheck);
+            return propTypeError(msg);
         }
     }
 
     // 验证类型，值存在且类型不为任何类型
-    if (propVal && propCheck.type !== 'Any' && propValType !== propCheck.type) {
-        return propTypeError(errorFn, propCheck, tagName, propsFullName, `In ${tagName}'s porperty ${localPropsFullName}, its type is ${propValType}, but it should be ${propCheck.type}.`);
+    if (propVal && propCheck.type !== 'Any') {
+        if (getType(propCheck.type, 'Function') && !(propVal instanceof propCheck.type)) {
+            msg = `In ${tagName}'s porperty ${localPropsFullName}, it not instanceOf ${propCheck.type.name}`;
+        } else if (propValType !== propCheck.type) {
+            msg = `In ${tagName}'s porperty ${localPropsFullName}, its type is ${propValType}, but it should be ${propCheck.type}.`;
+        }
+
+        if (msg) {
+            errorFn(tagName, localPropsFullName, propCheck);
+            propTypeError(msg);
+        }
     }
 
     // 看子属性是否需要验证
@@ -154,6 +168,9 @@ function validateCheckType(checkTypeObj, tagName, propsFullName) {
     if (!checkTypeObj.type) {
         return `In ${tagName}'s porperty ${propsFullName}, it must has 'type' property.`;
     }
+    if (getType(checkTypeObj.type, 'Function') && !checkTypeObj.type.name) {
+        return `In ${tagName}'s porperty ${propsFullName}, its type is not a legan Instance function`;
+    }
 }
 
 function PrimitiveTypeChecker(type) {
@@ -165,8 +182,8 @@ PrimitiveTypeChecker.prototype = {
 
         return this;
     },
-    setIsRequired: function() {
-        this.isRequired = true;
+    setRequired: function() {
+        this.required = true;
 
         return this;
     }
@@ -174,11 +191,34 @@ PrimitiveTypeChecker.prototype = {
 
 function createPrimitiveTypeChecker(type) {
     if (type == null) {
-        return propTypeError(undefined, undefined, undefined, undefined, undefined, 'type is Undefined or Null.');
+        return propTypeError('Type is Undefined or Null.');
     }
     return function() {
         return new PrimitiveTypeChecker(type);
     };
+}
+
+function createArrayOfTypeChecker(primitiveTypeChecker) {
+    if (!primitiveTypeChecker || !primitiveTypeChecker instanceof PrimitiveTypeChecker) {
+        return propTypeError('The type is not legal');
+    }
+
+    let checkObj = new PrimitiveTypeChecker('Array');
+    checkObj.children = primitiveTypeChecker;
+
+    return checkObj;
+}
+
+function createInstanceTypeChecker(expectedClass) {
+    if (!expectedClass || !getType(expectedClass, 'Function')) {
+        return propTypeError('The expectedClass is not legal');
+    }
+
+    return new PrimitiveTypeChecker(expectedClass);
+}
+
+function createObjectOfTypeChecker() {
+
 }
 
 var PropTypes = {
@@ -188,7 +228,11 @@ var PropTypes = {
     number: createPrimitiveTypeChecker('Number'),
     object: createPrimitiveTypeChecker('Object'),
     string: createPrimitiveTypeChecker('String'),
-    symbol: createPrimitiveTypeChecker('Symbol')
+    symbol: createPrimitiveTypeChecker('Symbol'),
+
+    arrayOf: createArrayOfTypeChecker,
+    instanceOf: createInstanceTypeChecker,
+    objectOf: createObjectOfTypeChecker
 };
 
 window.checkType = checkType;
