@@ -57,6 +57,8 @@ let getType = (obj, match) => {
 
 function propTypeError(message) {
     console.error(message);
+
+    return false;
 }
 
 /**
@@ -95,7 +97,8 @@ function checkType(checkObj, checkTypeObj, tagName = '<<anonymous>>', propsFullN
  */
 function judge(prop, checkObj, checkTypeObj, tagName, propsFullName, errorFn) {
     // 搞 prop.toString 主要是Symbol无法在模板字符串里取值，要人为toString取值
-    let checkTypeObjFlag = getType(checkTypeObj.type, 'String'),
+    // checkTypeObjFlag主要是来判断type值是作为类型判断，还是作为一个需要判断的key
+    let checkTypeObjFlag = !getType(checkTypeObj.type, 'Object'),
         propToStr = checkTypeObjFlag ? 
                     '' : getType(prop, 'Symbol') ?
                     prop.toString() :
@@ -134,22 +137,34 @@ function judge(prop, checkObj, checkTypeObj, tagName, propsFullName, errorFn) {
 
     // 验证类型，值存在且类型不为任何类型
     if (propVal && propCheck.type !== 'Any') {
+        // 判断instanceOf的
         if (getType(propCheck.type, 'Function') && !(propVal instanceof propCheck.type)) {
             msg = `In ${tagName}'s porperty ${localPropsFullName}, it not instanceOf ${propCheck.type.name}`;
+        
+        // 判断 oneOf 或者 oneOfType
+        } else if (getType(propCheck.type, 'Array')) {
+            // type[0] 的类型不为对象则判断 oneOf
+            if (!getType(propCheck.type[0], 'Object') && !propCheck.type.some(val => is(val, propVal))) {
+                msg = `In ${tagName}'s porperty ${localPropsFullName}, its value is ${propVal}, but expected one of ${JSON.stringify(propCheck.type)}.`;
+            } else if (!propCheck.type.some(checkTypeObj => judge(prop, propVal, checkTypeObj, tagName, propsFullName, errorFn))) {
+                msg = `In ${tagName}'s porperty ${localPropsFullName}, its type is not one of type xxx`;
+            }
         } else if (propValType !== propCheck.type) {
             msg = `In ${tagName}'s porperty ${localPropsFullName}, its type is ${propValType}, but it should be ${propCheck.type}.`;
         }
 
         if (msg) {
             errorFn(tagName, localPropsFullName, propCheck);
-            propTypeError(msg);
+            return propTypeError(msg);
         }
     }
 
     // 看子属性是否需要验证
     if (propVal && getType(propCheck.children, 'Object')) {
+        // 值是数组
         if (propValType === 'Array') {
-            if (!getType(propCheck.children.type, 'String')) {
+            // 判断 type 是否为对象，是说明type其实是一个需要检测的key，否则说明type是子元素的检查类型
+            if (getType(propCheck.children.type, 'Object')) {
                 propVal.forEach(function(item, index) {
                     checkType(item, propCheck.children, tagName, `${localPropsFullName}[${index}]`, errorFn);
                 });
@@ -162,6 +177,8 @@ function judge(prop, checkObj, checkTypeObj, tagName, propsFullName, errorFn) {
             checkType(propVal, propCheck.children, tagName, localPropsFullName, errorFn);
         }
     }
+
+    return true;
 }
 
 function validateCheckType(checkTypeObj, tagName, propsFullName) {
@@ -193,6 +210,7 @@ function createPrimitiveTypeChecker(type) {
     if (type == null) {
         return propTypeError('Type is Undefined or Null.');
     }
+    
     return function() {
         return new PrimitiveTypeChecker(type);
     };
@@ -221,6 +239,33 @@ function createObjectOfTypeChecker() {
 
 }
 
+function createEnumTypeChecker(expectedValues) {
+    if (!expectedValues || !getType(expectedValues, 'Array')) {
+        return propTypeError('Invalid argument supplied to oneOf, expected an instance of array.');
+    }
+
+    return new PrimitiveTypeChecker(expectedValues);
+}
+
+function createUnionTypeChecker(arrayOfTypeCheckers) {
+    if (!arrayOfTypeCheckers || !getType(arrayOfTypeCheckers, 'Array')) {
+        return propTypeError('Invalid argument supplied to oneOfType, expected an instance of array.');
+    }
+
+    return new PrimitiveTypeChecker(arrayOfTypeCheckers);
+}
+
+function createShapeTypeChecker(shapeTypes) {
+    if (!shapeTypes || !getType(shapeTypes, 'Object') || Object.keys(shapeTypes).concat(Object.getOwnPropertySymbols(shapeTypes)).every(key => shapeTypes[key] instanceof PrimitiveTypeChecker)) {
+        return propTypeError('Iegal shapeTypes');
+    }
+
+    let checkObj = new PrimitiveTypeChecker('Object');
+    checkObj.children = shapeTypes;
+
+    return checkObj;
+}
+
 var PropTypes = {
     array: createPrimitiveTypeChecker('Array'),
     bool: createPrimitiveTypeChecker('Boolean'),
@@ -232,7 +277,10 @@ var PropTypes = {
 
     arrayOf: createArrayOfTypeChecker,
     instanceOf: createInstanceTypeChecker,
-    objectOf: createObjectOfTypeChecker
+    objectOf: createObjectOfTypeChecker,
+    oneOf: createEnumTypeChecker,
+    oneOfType: createUnionTypeChecker,
+    shape: createShapeTypeChecker
 };
 
 window.checkType = checkType;
